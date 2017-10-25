@@ -29,6 +29,7 @@ class App(AsyncApp):
                     self.orders[currency]['time'] = time.time()
                     self.orders[currency]['price'] = last
                     self.orders[currency]['trading'] = True
+                    self.orders[currency]['profit'] = 0
                 else:
                     comission = (self.orders[currency]['price'] / 100.0) * FEE
                     price_with_fee = float(comission) + float(self.orders[currency]['price'])
