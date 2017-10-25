@@ -1,6 +1,7 @@
 import asyncio
 import signal
 import sys
+import time
 
 import aiohttp
 
@@ -67,7 +68,12 @@ class AsyncApp(Application):
             stop_decorator(self.main, self.push)()
         )
 
-        loop.run_until_complete(g)
+        try:
+            loop.run_until_complete(g)
+        except aiohttp.client_exceptions.WSServerHandshakeError:
+            print("error")
+
+
 
     def stop(self):
         self.loop.call_soon_threadsafe(self.loop.stop)

@@ -25,6 +25,7 @@ setup(
     author_email='andrew.shvv@gmail.com',
     install_requires=[
         'asyncio',
+        'asyncpg',
         'aiohttp',
         'autobahn',
         'pp-ez',
