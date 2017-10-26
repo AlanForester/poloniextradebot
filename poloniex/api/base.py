@@ -66,11 +66,11 @@ class BasePublicApi:
 
         start = kwargs.get("start")
         if start:
-            start = start.timestamp()
+            start = int(start)
 
         end = kwargs.get("end")
         if end:
-            end = end.timestamp()
+            end = int(end)
 
         period = kwargs.get("period")
         if period and period not in constants.CHART_DATA_PERIODS:

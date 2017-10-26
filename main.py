@@ -1,4 +1,4 @@
-from poloniex.app import AsyncApp
+from poloniex.app import AsyncApp, SyncApp
 import time
 import asyncio
 from threading import Thread
@@ -20,6 +20,7 @@ class App(AsyncApp):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.orders = {}
+        # self.api = SyncApp(api_key=API_KEY, api_sec=API_SECRET)
 
     def wrapped_trade_his(self, currency):
         async def get_trades():
@@ -29,7 +30,7 @@ class App(AsyncApp):
 
         return asyncio.wait(get_trades())
 
-    def ticker(self, **kwargs):
+    async def ticker(self, **kwargs):
         tick = kwargs
         if type(tick) is dict and tick.get('last'):
             currency = kwargs['currency_pair']
@@ -41,11 +42,29 @@ class App(AsyncApp):
                         self.orders[currency] = {}
                         self.orders[currency]['profit'] = 0.
 
-                    self.orders[currency]['time'] = time.time()
-                    self.orders[currency]['price'] = last
-                    self.orders[currency]['trading'] = True
-                    self.orders[currency]['volume'] = float(BID) / last
-                    self.orders[currency]['profit'] = 0
+                    # Анализатор объема торгов
+                    trade_history = await self.public.returnTradeHistory(currency_pair=currency,
+                                                                         start=time.time() - TIME_VOL_SEC,
+                                                                         end=time.time())
+                    vol_sell = 0.
+                    vol_buy = 0.
+                    vol_all = 0.
+                    for th in trade_history:
+                        if th['type'] == 'buy':
+                            vol_buy += float(th['amount'])
+                        if th['type'] == 'sell':
+                            vol_sell -= float(th['amount'])
+                        vol_all += float(th['amount'])
+                    if vol_sell > 0.:
+                        buy_delta = (vol_buy * 100. / vol_sell) - 100.
+                    else:
+                        buy_delta = 100
+                    if int(buy_delta) >= TIME_VOL_SEC:
+                        self.orders[currency]['time'] = time.time()
+                        self.orders[currency]['price'] = last
+                        self.orders[currency]['trading'] = True
+                        self.orders[currency]['volume'] = float(BID) / last
+                        self.orders[currency]['profit'] = 0
                 else:
                     comission = (self.orders[currency]['price'] / 100.0) * (FEE + PROFIT)
                     price_with_fee = float(comission) + float(self.orders[currency]['price'])
@@ -74,14 +93,14 @@ class App(AsyncApp):
                         self.orders[currency]['trading'] = False
                     self.orders[currency]['profit'] = delta - FEE
                 self.orders[currency]['last'] = last
-
                 # if self.orders[currency].get('trades') and len(self.orders[currency]['trades']) > 0:
                 #     self.logger.info(self.orders[currency])
+        await asyncio.sleep(0)
 
     def trades(self, **kwargs):
         self.logger.info(kwargs)
 
-    def log(self):
+    async def log(self):
         while True:
             fail = 0
             success = 0
@@ -110,7 +129,10 @@ class App(AsyncApp):
         # self.push.subscribe(topic="BTC_ETH", handler=self.trades)
         self.push.subscribe(topic="ticker", handler=self.ticker)
 
-        # volume = await self.public.return24hVolume()
+        # volume = await self.public.returnTradeHistory(currency_pair='BTC_ETH',
+        #                                               start=time.time() - TIME_VOL_SEC,
+        #                                               end=time.time())
+        # print(volume)
         # currencies = await self.public.returnCurrencies()
         # if currencies.get('BTC'):
         #     self.logger.info(currencies.get('BTC'))
@@ -134,8 +156,7 @@ class App(AsyncApp):
         #     vol_all += th['amount']
         # buy_delta = (vol_buy * 100. / vol_sell) - 100.
         # if int(buy_delta) >= TIME_VOL_SEC:
-        t = Thread(target=self.log)
-        t.start()
+        asyncio.gather(self.log())
 
 
 if __name__ == "__main__":
