@@ -28,6 +28,7 @@ import requests
 import sys
 import asyncio
 import aiohttp
+import aiofiles
 
 BUY_ORDERBOOK = 'buy'
 SELL_ORDERBOOK = 'sell'
@@ -62,22 +63,28 @@ PROTECTION_PUB = 'pub'  # public methods
 PROTECTION_PRV = 'prv'  # authenticated methods
 
 
-def encrypt(api_key, api_secret, export=True, export_fn='secrets.json'):
+async def encrypt(api_key, api_secret, export=True, export_fn='secrets.json'):
     cipher = AES.new(getpass.getpass(
         'Input encryption password (string will not show)'))
     api_key_n = cipher.encrypt(api_key)
     api_secret_n = cipher.encrypt(api_secret)
     api = {'key': str(api_key_n), 'secret': str(api_secret_n)}
     if export:
-        with open(export_fn, 'w') as outfile:
+        async with aiofiles.open(export_fn, 'w') as outfile:
             json.dump(api, outfile)
     return api
 
 
 async def using_requests(request_url, apisign):
-    with aiohttp.ClientSession as session:
-        async with session.get(request_url, headers={"apisign": apisign}) as resp:
-            return await resp.json()
+    with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(request_url, headers={"apisign": apisign}) as resp:
+                return await resp.json()
+        except aiohttp.client_exceptions.ClientConnectorError:
+            return await using_requests(request_url, apisign)
+        except aiohttp.client_exceptions.ServerDisconnectedError:
+            return await using_requests(request_url, apisign)
+
 
 
 class Bittrex(object):
@@ -109,15 +116,14 @@ class Bittrex(object):
         else:
             raise ImportError('"pycrypto" module has to be installed')
 
-    def wait(self):
+    async def wait(self):
         if self.last_call is None:
             self.last_call = time.time()
         else:
             now = time.time()
             passed = now - self.last_call
             if passed < self.call_rate:
-                # print("sleep")
-                time.sleep(1.0 - passed)
+                asyncio.sleep(1.0 - passed)
 
             self.last_call = time.time()
 
@@ -147,17 +153,13 @@ class Bittrex(object):
 
         request_url += urlencode(options)
 
-        try:
-           apisign = hmac.new(self.api_secret.encode(),
-                              request_url.encode(),
-                              hashlib.sha512).hexdigest()
+        apisign = hmac.new(self.api_secret.encode(),
+                          request_url.encode(),
+                          hashlib.sha512).hexdigest()
 
-           self.wait()
+        await self.wait()
 
-           return await self.dispatch(request_url, apisign)
-
-        except:
-            sys.exit(0)
+        return await self.dispatch(request_url, apisign)
 
     async def get_markets(self):
         """
@@ -794,6 +796,7 @@ class Bittrex(object):
         """
 
         return await self._api_query(path_dict={
+            API_V1_1: '/pub/market/GetTicks',
             API_V2_0: '/pub/market/GetTicks'
         }, options={
             'marketName': market, 'tickInterval': tick_interval
