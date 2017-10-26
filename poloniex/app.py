@@ -68,10 +68,7 @@ class AsyncApp(Application):
             stop_decorator(self.main, self.push)()
         )
 
-        try:
-            loop.run_until_complete(g)
-        except aiohttp.client_exceptions.WSServerHandshakeError:
-            print("error")
+        loop.run_until_complete(g)
 
 
 
