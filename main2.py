@@ -100,12 +100,6 @@ class App:
         return await asyncio.sleep(0)
 
     async def ticker(self, market):
-        # result = await asyncio.gather(
-        #     self.api.get_ticker(market),
-        #     self.api.get_market_history(market)
-        # )
-        # tick = result[0]
-        # trade_history = result[1]
         tick = await self.api.get_ticker(market)
         trade_history = await self.api.get_market_history(market)
         if tick['success'] and tick['result'] and tick['result']['Last']:
@@ -128,7 +122,7 @@ class App:
                     elif self.orders[order]['profit'] < 0.:
                         fail -= int(self.orders[order]['profit'])
 
-                if self.orders[order].get('trading') and self.orders[order]['trading'] == 1:
+                if self.orders[order].get('trading', False):
                     trading += 1
 
                 if self.orders[order].get('trades') and len(self.orders[order]['trades']) > 0:
