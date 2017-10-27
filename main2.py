@@ -4,29 +4,33 @@ import asyncio
 
 __author__ = 'alex@collin.su'
 
-API_KEY = "4e7cf9c842534da8ab72a2978aeb77ef"
-API_SECRET = "9e4adc5ccb0546b7adcccd93e4c058ba"
+API_KEY = "88e548ba9f424c5bbd6706555aa69109"
+API_SECRET = "b1c0bf1aa947490c8a5a1c9a20ae2188"
+# API_KEY = "4e7cf9c842534da8ab72a2978aeb77ef"
+# API_SECRET = "9e4adc5ccb0546b7adcccd93e4c058ba"
 FEE = 0.5
-PROFIT = 0.5
+PROFIT = 1.
 STOP_LOSS = 10.
 BID = 0.00001
-MIN_BUY_MORE_VOL = 50
+MIN_BUY_MORE_VOL = 100
 
 
 class App:
     def __init__(self, api_key=None, api_sec=None):
         self.orders = {}
+        self.min_trades = {}
         self.api = Bittrex(api_key, api_sec, api_version=API_V1_1)
         self.invest = 0
         self.balance = 0.
         self.trades = {'act': 0, 'buy': 0, 'sell': 0, 'lose': 0}
 
-    async def handler(self, currency, last, trade_history):
+    async def handler(self, currency, last):
         if not self.orders.get(currency) or not self.orders[currency].get('trading', False):
             if not self.orders.get(currency):
                 self.orders[currency] = {}
 
             # Анализатор объема торгов
+            trade_history = await self.api.get_market_history(currency)
             if trade_history['success'] and trade_history['result']:
                 vol_sell = 0.
                 vol_buy = 0.
@@ -59,7 +63,8 @@ class App:
                     self.trades['act'] += 1
                     print("BUY:", currency, "Market:", "+" + str(int(buy_delta)) + "%",
                           "Price:", "%.8f" % last,
-                          "Vol:", "%.8f" % self.orders[currency]['volume'], "Fee:", "%.8f" % self.orders[currency]['fee'])
+                          "Vol:", "%.8f" % self.orders[currency]['volume'], "Fee:",
+                          "%.8f" % self.orders[currency]['fee'])
         else:
             current_price = last * self.orders[currency]['volume']
             delta = int((current_price - self.orders[currency]['total']) * 100000000.)
@@ -107,12 +112,9 @@ class App:
         self.orders[currency]['last'] = last
         return await asyncio.sleep(0)
 
-    async def ticker(self, market):
-        tick = await self.api.get_ticker(market)
-        trade_history = await self.api.get_market_history(market)
-        if tick['success'] and tick['result'] and tick['result']['Last']:
-            last = float(tick['result']['Last'])
-            return await self.handler(market, last, trade_history)
+    async def ticker(self, market, tick):
+        if float(self.min_trades.get(market, 0.)):
+            return await self.handler(market, float(tick))
         return False
 
     async def log(self):
@@ -144,26 +146,35 @@ class App:
                         if t['profit'] < 0:
                             lose -= t['profit']
 
-            print("Raise:", str(success)+"("+str(success_c)+")", "Waste:", str(fail)+"("+str(fail_c)+")", "Trading:",
-                  trading, "Take:", win, "Loss:", lose, "Invest:",
+            print("Raise:", str(success) + "(" + str(success_c) + ")", "Waste:", str(fail) + "(" + str(fail_c) + ")",
+                  "Trading:", trading, "Take:", win, "Loss:", lose, "Invest:",
                   "%.8f" % (self.invest / 100000000), "Balance:", "%.8f" % self.balance,
                   "Orders:", self.trades['act'], self.trades['buy'], self.trades['sell'], self.trades['lose'])
             await asyncio.sleep(1)
 
     async def run(self, input_market=None):
-        asyncio.ensure_future(self.log())
+        asyncio.run_coroutine_threadsafe(self.log(), asyncio.get_event_loop())
+        await self.get_min_trades()
         while True:
             gather = []
             if not input_market:
-                markets = await self.api.get_markets()
+                markets = await self.api.get_market_summaries()
                 if markets['success']:
                     for market in markets['result']:
                         check_btc = market['MarketName'].split('-')
                         if check_btc[0] == 'BTC':
-                            gather.append(self.ticker(market['MarketName']))
+                            gather.append(self.ticker(market['MarketName'], market['Last']))
             else:
-                gather.append(self.ticker(input_market))
+                tick = await self.api.get_ticker(input_market)
+                gather.append(self.ticker(input_market, tick.get('result', {}).get('Last')))
             await asyncio.gather(*gather)
+            await asyncio.sleep(1)
+
+    async def get_min_trades(self):
+        markets = await self.api.get_markets()
+        if markets['success']:
+            for market in markets['result']:
+                self.min_trades[market['MarketName']] = market['MinTradeSize']
 
 
 if __name__ == "__main__":

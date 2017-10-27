@@ -27,6 +27,7 @@ setup(
         'asyncio',
         'asyncpg',
         'aiohttp',
+        'aiofiles',
         'autobahn',
         'pp-ez',
         'requests'
