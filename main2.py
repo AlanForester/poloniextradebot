@@ -8,9 +8,9 @@ API_KEY = "4e7cf9c842534da8ab72a2978aeb77ef"
 API_SECRET = "9e4adc5ccb0546b7adcccd93e4c058ba"
 FEE = 0.5
 PROFIT = 0.5
-STOP_LIMIT = 10.
+STOP_LOSS = 10.
 BID = 0.00001
-MIN_BUY_MORE_VOL = 30
+MIN_BUY_MORE_VOL = 50
 
 
 class App:
@@ -47,30 +47,32 @@ class App:
                     self.orders[currency]['trading'] = True
                     self.orders[currency]['volume'] = float(BID) / last
                     self.orders[currency]['profit'] = 0
+                    self.orders[currency]['total'] = self.orders[currency]['volume'] * self.orders[currency]['price']
+                    total_percent = self.orders[currency]['total'] / 100
+                    win_percent = FEE + PROFIT
+                    self.orders[currency]['fee'] = self.orders[currency]['total'] / 100 * FEE
+                    self.orders[currency]['take_profit'] = total_percent * win_percent + self.orders[currency]['total']
+                    self.orders[currency]['stop_loss'] = self.orders[currency]['total'] - (total_percent * STOP_LOSS)
                     self.invest += int(float(BID) * 100000000.)
                     self.balance -= float(BID) + (float(BID) * (FEE / 100))
                     self.trades['buy'] += 1
                     self.trades['act'] += 1
-                    print("BUY:", currency, "Market:", "+" + str(int(buy_delta)) + "%", "Price:", last,
-                          "Fee:", "%.8f" % (float(BID) * (FEE / 100)))
+                    print("BUY:", currency, "Market:", "+" + str(int(buy_delta)) + "%",
+                          "Price:", "%.8f" % last,
+                          "Vol:", "%.8f" % self.orders[currency]['volume'], "Fee:", "%.8f" % self.orders[currency]['fee'])
         else:
-            comission = (self.orders[currency]['price'] / 100.0) * (FEE + PROFIT)
-            price_with_fee = float(comission) + float(self.orders[currency]['price'])
-            delta = int((last - price_with_fee) * 100000000. * self.orders[currency]['volume'])
-            delta_wo_fee = int(
-                (last - float(self.orders[currency]['price'])) * 100000000. * self.orders[currency]['volume'])
-            stop_comission = (self.orders[currency]['price'] / 100.0) * (STOP_LIMIT - FEE)
-            price_stop = float(self.orders[currency]['price']) - float(stop_comission)
-
+            current_price = last * self.orders[currency]['volume']
+            delta = int((current_price - self.orders[currency]['total']) * 100000000.)
+            delta_with_fee = delta - int(self.orders[currency]['fee'] * 100000000.)
             # Инициализируем массив торгов если не было
             if not self.orders[currency].get('trades'):
                 self.orders[currency]['trades'] = []
             trades = self.orders[currency]['trades']
 
-            if price_with_fee < last and delta >= 1:
+            if current_price > self.orders[currency]['take_profit']:
                 # Обработчик на закрытие сделки по прибыли
                 trade = dict()
-                trade['profit'] = delta
+                trade['profit'] = delta_with_fee
                 trade['time'] = time.time()
                 trades.append(trade)
                 self.orders[currency]['trading'] = False
@@ -78,13 +80,16 @@ class App:
                 self.balance += float(BID) + (float(delta) / 100000000.)
                 self.trades['act'] -= 1
                 self.trades['sell'] += 1
-                print("SELL:", currency, "Profit:", delta, "Buy:", self.orders[currency]['price'],
-                      "Sell:", last, "Delta:", "%.8f" % float(last - self.orders[currency]['price']),
-                      "Fee:", "%.8f" % (float(BID) / 100000000.))
-            elif price_stop >= last:
+                print("SELL:", currency, "Profit:", delta,
+                      "Buy:", "%.8f" % self.orders[currency]['price'],
+                      "Sell:", "%.8f" % last,
+                      "Vol:", "%.8f" % self.orders[currency]['volume'],
+                      "Delta:", "%.8f" % delta_with_fee,
+                      "Fee:", "%.8f" % self.orders[currency]['fee'])
+            elif current_price <= self.orders[currency]['stop_loss']:
                 # Обработчик на закрытие по убытку
                 trade = dict()
-                trade['profit'] = delta
+                trade['profit'] = delta_with_fee
                 trade['time'] = time.time()
                 trades.append(trade)
                 self.orders[currency]['trading'] = False
@@ -92,10 +97,13 @@ class App:
                 self.balance += float(BID) - (float(delta) / 100000000.)
                 self.trades['act'] -= 1
                 self.trades['lose'] += 1
-                print("LOSE:", currency, "Profit:", delta, "Buy:", self.orders[currency]['price'],
-                      "Sell:", last, "Delta:", "%.8f" % float(last - self.orders[currency]['price'] - last),
-                      "Fee:", "%.8f" % (float(BID) / 100000000.))
-            self.orders[currency]['profit'] = delta_wo_fee
+                print("LOSE:", currency, "Profit:", delta,
+                      "Buy:", "%.8f" % self.orders[currency]['price'],
+                      "Sell:", "%.8f" % last,
+                      "Vol:", "%.8f" % self.orders[currency]['volume'],
+                      "Delta:", "%.8f" % delta_with_fee,
+                      "Fee:", "%.8f" % self.orders[currency]['fee'])
+            self.orders[currency]['profit'] = delta
         self.orders[currency]['last'] = last
         return await asyncio.sleep(0)
 
@@ -110,7 +118,9 @@ class App:
     async def log(self):
         while True:
             fail = 0
+            fail_c = 0
             success = 0
+            success_c = 0
             trading = 0
             win = 0
             lose = 0
@@ -118,8 +128,10 @@ class App:
             for order in self.orders.keys():
                 if self.orders.get(order) and self.orders[order].get('profit'):
                     if self.orders[order]['profit'] > 0.:
+                        success_c += 1
                         success += int(self.orders[order]['profit'])
                     elif self.orders[order]['profit'] < 0.:
+                        fail_c += 1
                         fail -= int(self.orders[order]['profit'])
 
                 if self.orders[order].get('trading', False):
@@ -132,7 +144,8 @@ class App:
                         if t['profit'] < 0:
                             lose -= t['profit']
 
-            print("Raise:", success, "Waste:", fail, "Trading:", trading, "Win:", win, "Lose:", lose, "Invest:",
+            print("Raise:", str(success)+"("+str(success_c)+")", "Waste:", str(fail)+"("+str(fail_c)+")", "Trading:",
+                  trading, "Take:", win, "Loss:", lose, "Invest:",
                   "%.8f" % (self.invest / 100000000), "Balance:", "%.8f" % self.balance,
                   "Orders:", self.trades['act'], self.trades['buy'], self.trades['sell'], self.trades['lose'])
             await asyncio.sleep(1)
