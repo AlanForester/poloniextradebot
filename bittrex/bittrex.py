@@ -84,6 +84,8 @@ async def using_requests(request_url, apisign):
             return await using_requests(request_url, apisign)
         except aiohttp.client_exceptions.ServerDisconnectedError:
             return await using_requests(request_url, apisign)
+        except aiohttp.client_exceptions.ContentTypeError:
+            return await using_requests(request_url, apisign)
 
 
 
