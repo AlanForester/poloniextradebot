@@ -92,6 +92,8 @@ async def using_requests(request_url, apisign):
             return await using_requests(request_url, apisign)
         except asyncio.TimeoutError:
             return await using_requests(request_url, apisign)
+        except TimeoutError:
+            return await using_requests(request_url, apisign)
 
 
 class Bittrex(object):
@@ -134,7 +136,7 @@ class Bittrex(object):
 
             self.last_call = time.time()
 
-    async def _api_query(self, protection=None, path_dict=None, options=None):
+    async def _api_query(self, protection=None, path_dict=None, options=None, apiv1only=None):
         """
         Queries Bittrex
 
@@ -143,15 +145,18 @@ class Bittrex(object):
         :return: JSON response from Bittrex
         :rtype : dict
         """
-
+        api_version = self.api_version
+        if apiv1only:
+            api_version = API_V1_1
         if not options:
             options = {}
 
-        if self.api_version not in path_dict:
-            raise Exception('method call not available under API version {}'.format(self.api_version))
+        if api_version not in path_dict:
+            raise Exception('method call not available under API version {}'.format(api_version))
 
-        request_url = BASE_URL_V2_0 if self.api_version == API_V2_0 else BASE_URL_V1_1
-        request_url = request_url.format(path=path_dict[self.api_version])
+        request_url = BASE_URL_V2_0 if api_version == API_V2_0 else BASE_URL_V1_1
+        request_url = request_url.format(path=path_dict[api_version])
+
 
         nonce = str(int(time.time() * 1000))
 
@@ -324,9 +329,8 @@ class Bittrex(object):
         :rtype : dict
         """
         return await self._api_query(path_dict={
-            API_V1_1: '/public/getmarkethistory',
-            API_V2_0: '/pub/Market/GetMarketHistory'
-        }, options={'market': market, 'marketname': market}, protection=PROTECTION_PUB)
+            API_V1_1: '/public/getmarkethistory'
+        }, options={'market': market}, protection=PROTECTION_PUB, apiv1only=True)
 
     async def buy_limit(self, market, quantity, rate):
         """

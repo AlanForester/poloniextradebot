@@ -30,6 +30,7 @@ setup(
         'aiofiles',
         'autobahn',
         'pp-ez',
+        'uvloop',
         'requests'
     ],
     classifiers=[
