@@ -13,11 +13,11 @@ API_SECRET = "b1c0bf1aa947490c8a5a1c9a20ae2188"
 # API_KEY = "4e7cf9c842534da8ab72a2978aeb77ef"
 # API_SECRET = "9e4adc5ccb0546b7adcccd93e4c058ba"
 FEE = 0.5
-PROFIT = 2.0
+PROFIT = 1.0
 STOP_LOSS = 10.
 BID = 0.00001
-MIN_BUY_MORE_VOL = 100
-TIME_LAST_TRADE = 30
+MIN_BUY_MORE_VOL = 500
+TIME_LAST_TRADE = 10
 BUY_LIMIT = 0.0001
 OVER_MINBUY_COEF = 0.1
 
@@ -82,55 +82,58 @@ class App:
                       "%.8f" % self.orders[currency]['fee'])
         return True
 
+    async def sell_handler(self, currency, last):
+        current_price = last * self.orders[currency]['volume']
+        delta = int((current_price - self.orders[currency]['total']) * 100000000.)
+        delta_with_fee = delta - int(self.orders[currency]['fee'] * 100000000.)
+        self.orders[currency]['profit'] = delta
+        # Инициализируем массив торгов если не было
+        if not self.orders[currency].get('trades'):
+            self.orders[currency]['trades'] = []
+        trades = self.orders[currency]['trades']
+
+        if current_price > self.orders[currency]['take_profit']:
+            # Обработчик на закрытие сделки по прибыли
+            trade = dict()
+            trade['profit'] = delta_with_fee
+            trade['time'] = time.time()
+            trades.append(trade)
+            self.orders[currency]['trading'] = False
+            self.invest -= int(float(BID) * 100000000.)
+            self.balance += float(BID) + (float(delta) / 100000000.)
+            self.trades['act'] -= 1
+            self.trades['sell'] += 1
+            print("SELL:", currency, "Profit:", delta_with_fee,
+                  "Buy:", "%.8f" % self.orders[currency]['price'],
+                  "Sell:", "%.8f" % last,
+                  "Vol:", "%.8f" % self.orders[currency]['volume'],
+                  "Delta:", "%.8f" % delta,
+                  "Fee:", "%.8f" % self.orders[currency]['fee'])
+        elif current_price <= self.orders[currency]['stop_loss']:
+            # Обработчик на закрытие по убытку
+            trade = dict()
+            trade['profit'] = delta_with_fee
+            trade['time'] = time.time()
+            trades.append(trade)
+            self.orders[currency]['trading'] = False
+            self.invest -= int(float(BID) * 100000000.)
+            self.balance += float(BID) - (float(delta) / 100000000.)
+            self.trades['act'] -= 1
+            self.trades['lose'] += 1
+            print("LOSE:", currency, "Profit:", delta_with_fee,
+                  "Buy:", "%.8f" % self.orders[currency]['price'],
+                  "Sell:", "%.8f" % last,
+                  "Vol:", "%.8f" % self.orders[currency]['volume'],
+                  "Delta:", "%.8f" % delta,
+                  "Fee:", "%.8f" % self.orders[currency]['fee'])
+
     async def handler(self, currency, last):
         if not self.orders.get(currency) or not self.orders[currency].get('trading', False):
             if not self.orders.get(currency):
                 self.orders[currency] = {}
             self.orders[currency]['working'] = asyncio.ensure_future(self.buy_handler(currency, last))
         else:
-            current_price = last * self.orders[currency]['volume']
-            delta = int((current_price - self.orders[currency]['total']) * 100000000.)
-            delta_with_fee = delta - int(self.orders[currency]['fee'] * 100000000.)
-            # Инициализируем массив торгов если не было
-            if not self.orders[currency].get('trades'):
-                self.orders[currency]['trades'] = []
-            trades = self.orders[currency]['trades']
-
-            if current_price > self.orders[currency]['take_profit']:
-                # Обработчик на закрытие сделки по прибыли
-                trade = dict()
-                trade['profit'] = delta_with_fee
-                trade['time'] = time.time()
-                trades.append(trade)
-                self.orders[currency]['trading'] = False
-                self.invest -= int(float(BID) * 100000000.)
-                self.balance += float(BID) + (float(delta) / 100000000.)
-                self.trades['act'] -= 1
-                self.trades['sell'] += 1
-                print("SELL:", currency, "Profit:", delta_with_fee,
-                      "Buy:", "%.8f" % self.orders[currency]['price'],
-                      "Sell:", "%.8f" % last,
-                      "Vol:", "%.8f" % self.orders[currency]['volume'],
-                      "Delta:", "%.8f" % delta,
-                      "Fee:", "%.8f" % self.orders[currency]['fee'])
-            elif current_price <= self.orders[currency]['stop_loss']:
-                # Обработчик на закрытие по убытку
-                trade = dict()
-                trade['profit'] = delta_with_fee
-                trade['time'] = time.time()
-                trades.append(trade)
-                self.orders[currency]['trading'] = False
-                self.invest -= int(float(BID) * 100000000.)
-                self.balance += float(BID) - (float(delta) / 100000000.)
-                self.trades['act'] -= 1
-                self.trades['lose'] += 1
-                print("LOSE:", currency, "Profit:", delta_with_fee,
-                      "Buy:", "%.8f" % self.orders[currency]['price'],
-                      "Sell:", "%.8f" % last,
-                      "Vol:", "%.8f" % self.orders[currency]['volume'],
-                      "Delta:", "%.8f" % delta,
-                      "Fee:", "%.8f" % self.orders[currency]['fee'])
-            self.orders[currency]['profit'] = delta
+            await self.sell_handler(currency, last)
         self.orders[currency]['last'] = last
 
     async def ticker(self, market, tick):
@@ -185,7 +188,7 @@ class App:
             await asyncio.sleep(1)
 
     async def run(self, input_market=None):
-        asyncio.gather(self.log())
+        asyncio.ensure_future(self.log())
         while True:
             markets = await self.api.get_market_summaries()
             if markets['success']:
@@ -203,6 +206,7 @@ class App:
                 if len(gather) > 0:
                     await asyncio.gather(*gather)
             self.last_tick = time.time()
+            await asyncio.sleep(1)
 
 if __name__ == "__main__":
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
