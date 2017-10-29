@@ -52,7 +52,6 @@ class App:
         self.min_trades = {}
         self.api = Bittrex(api_key, api_sec, api_version=API_V2_0)
         self.invest = 0
-        self.balance = 0.
         self.trades = {'act': 0, 'buy': 0, 'sell': 0, 'lose': 0}
         self.last_tick = time.time()
         dt = datetime.datetime.now()
@@ -116,11 +115,10 @@ class App:
                 self.orders[currency]['take_profit'] = total_percent * win_percent + self.orders[currency]['total']
                 self.orders[currency]['stop_loss'] = self.orders[currency]['total'] - (total_percent * STOP_LOSS)
                 self.invest += int(float(BID) * 100000000.)
-                self.balance -= float(BID) + (float(BID) * (FEE / 100))
                 self.trades['buy'] += 1
                 self.trades['act'] += 1
                 now = datetime.datetime.now()
-                log = "[{0}] BUY:{0} Market:{1} Price:{2} Vol:{3} Total{4} Fee:{5}" \
+                log = "[{0}] BUY:{0} Market:{1} Price:{2} Vol:{3} Total:{4} Fee:{5}" \
                     .format(now.strftime('%Y-%m-%d %H:%M:%S'),
                             currency, "+" + str(int(buy_delta)) + "%",
                             "%.8f" % last,
@@ -128,7 +126,7 @@ class App:
                             "%.8f" % self.orders[currency]['total'],
                             "%.8f" % self.orders[currency]['fee'])
                 print(log)
-                async with aiofiles.open('./logs/trades.log', 'a+') as f:
+                async with aiofiles.open('./logs/{0}_trades.log'.format(self.init_time_str), 'a+') as f:
                     await f.write(str(log) + '\n')
         return True
 
@@ -154,7 +152,6 @@ class App:
                 trades.append(trade)
                 self.orders[currency]['trading'] = False
                 self.invest -= int(float(BID) * 100000000.)
-                self.balance += float(BID) + (float(delta) / 100000000.)
                 self.trades['act'] -= 1
                 self.trades['sell'] += 1
                 now = datetime.datetime.now()
@@ -175,7 +172,6 @@ class App:
                 trades.append(trade)
                 self.orders[currency]['trading'] = False
                 self.invest -= int(float(BID) * 100000000.)
-                self.balance += float(BID) - (float(delta) / 100000000.)
                 self.trades['act'] -= 1
                 self.trades['lose'] += 1
                 now = datetime.datetime.now()
@@ -185,7 +181,7 @@ class App:
                             "%.8f" % last, "%.8f" % self.orders[currency]['volume'],
                             "%.8f" % self.orders[currency]['total'],
                             "%.8f" % delta, "%.8f" % self.orders[currency]['fee'])
-                async with aiofiles.open('./logs/{0}_trades.log'.format(self.init_time_str), 'a+') as f:
+                async with aiofiles.open('./logs/{0}_trades.log'.format(self.init_time_str).format(self.init_time_str), 'a+') as f:
                     await f.write(log + '\n')
                 print(log)
             self.orders[currency]['profit'] = delta
@@ -229,14 +225,16 @@ class App:
                         delta = int((model['last'] - model['price']) * model['volume'] * 100000000)
                         now = datetime.datetime.now()
                         await f.write(
-                            "[{0}] {1} - Last:{2} Buy:{3} TP:{7} SL:{9} | BUY Vol:{4} Total:{11} Delta:{5} Fee:{6} | LEFT TP:{8} SL:{10}\n".format(
-                                now.strftime('%Y-%m-%d %H:%M:%S'), order,
-                                "%.8f" % model['last'], "%.8f" % model['price'], "%.8f" % model['volume'],
-                                "%d" % delta, "%d" % int(model['fee'] * 100000000),
-                                "%.8f" % (model['take_profit'] / model['volume']),
-                                int((model['take_profit'] - curr_price) * 100000000),
-                                "%.8f" % (model['stop_loss'] / model['volume']),
-                                int((curr_price - model['stop_loss']) * 100000000), "%.8f" % model['total']))
+                            "[{0}] {1} - Last:{2} Buy:{3} TP:{7} SL:{9} | BUY Vol:{4} Total:{11} Delta:{5} Fee:{6} "
+                            "| LEFT TP:{8} SL:{10}\n".format(now.strftime('%Y-%m-%d %H:%M:%S'), order,
+                                                             "%.8f" % model['last'], "%.8f" % model['price'],
+                                                             "%.8f" % model['volume'],
+                                                             "%d" % delta, "%d" % int(model['fee'] * 100000000),
+                                                             "%.8f" % (model['take_profit'] / model['volume']),
+                                                             int((model['take_profit'] - curr_price) * 100000000),
+                                                             "%.8f" % (model['stop_loss'] / model['volume']),
+                                                             int((curr_price - model['stop_loss']) * 100000000),
+                                                             "%.8f" % model['total']))
                     if self.orders[order].get('trades') and len(self.orders[order]['trades']) > 0:
                         for t in self.orders[order]['trades']:
                             if t['profit'] > 0:
@@ -247,11 +245,12 @@ class App:
                         fee += self.orders[order].get('fee')
                 await f.write(
                     "=======================================================================================\n")
-
-            print("Raise:", str(success) + "(" + str(success_c) + ")", "Waste:", str(fail) + "(" + str(fail_c) + ")",
+            now = datetime.datetime.now()
+            print("["+now.strftime('%Y-%m-%d %H:%M:%S')+"]", "Raise:", str(success) + "(" + str(success_c) + ")", "Waste:",
+                  str(fail) + "(" + str(fail_c) + ")",
                   "Fee:", int(fee * 100000000.), "Take:", win, "Loss:", lose,
-                  "=> Delta:", win + success - fail - int(fee * 100000000.) - lose,
-                  "| Invest:", "%.8f" % (self.invest / 100000000), "Balance:", "%.8f" % self.balance,
+                  "| Invest:", "%.8f" % (self.invest / 100000000),
+                  "Balance:", win + success - fail - int(fee * 100000000.) - lose,
                   "Orders(All,Profit,Loss):", self.trades['buy'], self.trades['sell'], self.trades['lose'],
                   "Tick:", str(int(time.time() - self.last_tick)) + 'sec.',
                   "Trading:", trading)
