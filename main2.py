@@ -9,10 +9,10 @@ import aiofiles
 
 __author__ = 'alex@collin.su'
 
-# API_KEY = "88e548ba9f424c5bbd6706555aa69109"
-# API_SECRET = "b1c0bf1aa947490c8a5a1c9a20ae2188"
-API_KEY = "4e7cf9c842534da8ab72a2978aeb77ef"
-API_SECRET = "9e4adc5ccb0546b7adcccd93e4c058ba"
+API_KEY = "88e548ba9f424c5bbd6706555aa69109"
+API_SECRET = "b1c0bf1aa947490c8a5a1c9a20ae2188"
+# API_KEY = "4e7cf9c842534da8ab72a2978aeb77ef"
+# API_SECRET = "9e4adc5ccb0546b7adcccd93e4c058ba"
 
 FEE = 0.5
 # Take profit цена (PROFIT + FEE)

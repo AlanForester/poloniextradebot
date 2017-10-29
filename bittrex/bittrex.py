@@ -90,6 +90,8 @@ async def using_requests(request_url, apisign):
             return await using_requests(request_url, apisign)
         except aiohttp.client_exceptions.ClientPayloadError:
             return await using_requests(request_url, apisign)
+        except asyncio.TimeoutError:
+            return {}
         except TimeoutError:
             return await using_requests(request_url, apisign)
 
