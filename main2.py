@@ -9,28 +9,28 @@ import aiofiles
 
 __author__ = 'alex@collin.su'
 
-API_KEY = "88e548ba9f424c5bbd6706555aa69109"
-API_SECRET = "b1c0bf1aa947490c8a5a1c9a20ae2188"
-# API_KEY = "4e7cf9c842534da8ab72a2978aeb77ef"
-# API_SECRET = "9e4adc5ccb0546b7adcccd93e4c058ba"
+# API_KEY = "88e548ba9f424c5bbd6706555aa69109"
+# API_SECRET = "b1c0bf1aa947490c8a5a1c9a20ae2188"
+API_KEY = "4e7cf9c842534da8ab72a2978aeb77ef"
+API_SECRET = "9e4adc5ccb0546b7adcccd93e4c058ba"
 
 FEE = 0.5
 # Take profit цена (PROFIT + FEE)
-PROFIT = 1.5
+PROFIT = 1.0
 # Stop loss цена
-STOP_LOSS = 10.
+STOP_LOSS = 20.
 # Сумма покупки актива BTC
 BID = 0.00001
 
 # Время выборки данных из истории торгов
 # Условие для длительного анализа истории
-TIME_LAST_TRADE = 30
+TIME_LAST_TRADE = 60
 # Условие для короткого анализа истории
-TIME_MIN_TRADE = 10
+TIME_MIN_TRADE = 30
 
 # Условие которое ограничевает покупку валют объем покупок которых
 # ниже чем продаж в процентном соотношении
-MIN_BUY_MORE_VOL = 100
+MIN_BUY_MORE_VOL = 300
 # Максимальная сумма BTC при покупке актива
 BUY_LIMIT = 0.0001
 # Коэффициэнт суммы покупки на превышение минимального объема MIN_BUY_MORE_VOL
@@ -118,7 +118,7 @@ class App:
                 self.trades['buy'] += 1
                 self.trades['act'] += 1
                 now = datetime.datetime.now()
-                log = "[{0}] BUY - {1} Market:{2} Price:{3} Vol:{4} Total:{5} Fee:{6}" \
+                log = "[{0}] BUY  - {1} Market:{2} Price:{3} Vol:{4} Total:{5} Fee:{6}" \
                     .format(now.strftime('%Y-%m-%d %H:%M:%S'),
                             currency, "+" + str(int(buy_delta)) + "%",
                             "%.8f" % last,
@@ -155,7 +155,7 @@ class App:
                 self.trades['act'] -= 1
                 self.trades['sell'] += 1
                 now = datetime.datetime.now()
-                log = "[{0}] SELL - {1} Profit:{2} Buy:{3} Sell:{4} Vol:{5} Total:{6} Delta:{7} Fee:{8}" \
+                log = "[{0}] SELL  - {1} Profit:{2} Buy:{3} Sell:{4} Vol:{5} Total:{6} Delta:{7} Fee:{8}" \
                     .format(now.strftime('%Y-%m-%d %H:%M:%S'),
                             currency, delta_with_fee, "%.8f" % self.orders[currency]['price'],
                             "%.8f" % last, "%.8f" % self.orders[currency]['volume'],

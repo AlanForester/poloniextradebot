@@ -90,8 +90,6 @@ async def using_requests(request_url, apisign):
             return await using_requests(request_url, apisign)
         except aiohttp.client_exceptions.ClientPayloadError:
             return await using_requests(request_url, apisign)
-        except asyncio.TimeoutError:
-            return await using_requests(request_url, apisign)
         except TimeoutError:
             return await using_requests(request_url, apisign)
 
@@ -136,7 +134,7 @@ class Bittrex(object):
 
             self.last_call = time.time()
 
-    async def _api_query(self, protection=None, path_dict=None, options=None, apiv1only=None):
+    async def _api_query(self, protection=None, path_dict=None, options=None, apiv1only=None, apiv2only=None):
         """
         Queries Bittrex
 
@@ -148,6 +146,8 @@ class Bittrex(object):
         api_version = self.api_version
         if apiv1only:
             api_version = API_V1_1
+        if apiv2only:
+            api_version = API_V2_0
         if not options:
             options = {}
 
@@ -807,8 +807,7 @@ class Bittrex(object):
         """
 
         return await self._api_query(path_dict={
-            API_V1_1: '/pub/market/GetTicks',
             API_V2_0: '/pub/market/GetTicks'
         }, options={
             'marketName': market, 'tickInterval': tick_interval
-        }, protection=PROTECTION_PUB)
+        }, protection=PROTECTION_PUB, apiv2only=True)
