@@ -16,7 +16,7 @@ API_SECRET = "b1c0bf1aa947490c8a5a1c9a20ae2188"
 
 FEE = 0.5
 # Take profit цена (PROFIT + FEE)
-PROFIT = 2.0
+PROFIT = 1.5
 # Stop loss цена
 STOP_LOSS = 10.
 # Сумма покупки актива BTC
@@ -118,7 +118,7 @@ class App:
                 self.trades['buy'] += 1
                 self.trades['act'] += 1
                 now = datetime.datetime.now()
-                log = "[{0}] BUY:{1} Market:{2} Price:{3} Vol:{4} Total:{5} Fee:{6}" \
+                log = "[{0}] BUY - {1} Market:{2} Price:{3} Vol:{4} Total:{5} Fee:{6}" \
                     .format(now.strftime('%Y-%m-%d %H:%M:%S'),
                             currency, "+" + str(int(buy_delta)) + "%",
                             "%.8f" % last,
@@ -155,7 +155,7 @@ class App:
                 self.trades['act'] -= 1
                 self.trades['sell'] += 1
                 now = datetime.datetime.now()
-                log = "[{0}] SELL:{1} Profit:{2} Buy:{3} Sell:{4} Vol:{5} Total:{6} Delta:{7} Fee:{8}" \
+                log = "[{0}] SELL - {1} Profit:{2} Buy:{3} Sell:{4} Vol:{5} Total:{6} Delta:{7} Fee:{8}" \
                     .format(now.strftime('%Y-%m-%d %H:%M:%S'),
                             currency, delta_with_fee, "%.8f" % self.orders[currency]['price'],
                             "%.8f" % last, "%.8f" % self.orders[currency]['volume'],
@@ -175,7 +175,7 @@ class App:
                 self.trades['act'] -= 1
                 self.trades['lose'] += 1
                 now = datetime.datetime.now()
-                log = "[{0}] LOSS:{1} Profit:{2} Buy:{3} Sell:{4} Vol:{5} Total:{6} Delta:{7} Fee:{8}" \
+                log = "[{0}] LOSS - {1} Profit:{2} Buy:{3} Sell:{4} Vol:{5} Total:{6} Delta:{7} Fee:{8}" \
                     .format(now.strftime('%Y-%m-%d %H:%M:%S'),
                             currency, delta_with_fee, "%.8f" % self.orders[currency]['price'],
                             "%.8f" % last, "%.8f" % self.orders[currency]['volume'],
@@ -246,7 +246,7 @@ class App:
                 await f.write(
                     "=======================================================================================\n")
             now = datetime.datetime.now()
-            print("["+now.strftime('%Y-%m-%d %H:%M:%S')+"]", "INFO", "Raise:", str(success) + "(" + str(success_c) + ")", "Waste:",
+            print("["+now.strftime('%Y-%m-%d %H:%M:%S')+"]", "INFO -", "Raise:", str(success) + "(" + str(success_c) + ")", "Waste:",
                   str(fail) + "(" + str(fail_c) + ")",
                   "Fee:", int(fee * 100000000.), "Take:", win, "Loss:", lose,
                   "| Invest:", "%.8f" % (self.invest / 100000000),
