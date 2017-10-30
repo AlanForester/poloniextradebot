@@ -260,7 +260,7 @@ class App:
         asyncio.gather(self.log())
         while True:
             markets = await self.api.get_market_summaries()
-            if markets['success']:
+            if markets.get('success'):
                 gather = []
                 for market in markets['result']:
                     market_delta = float(market['Summary']['High']) - float(market['Summary']['Low'])
