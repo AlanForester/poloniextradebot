@@ -5,6 +5,7 @@
 import time
 import hmac
 import hashlib
+from concurrent.futures._base import CancelledError
 
 try:
     from urllib import urlencode
@@ -78,7 +79,7 @@ async def encrypt(api_key, api_secret, export=True, export_fn='secrets.json'):
 async def using_requests(request_url, apisign):
     with aiohttp.ClientSession() as session:
         try:
-            async with session.get(request_url, headers={"apisign": apisign}) as resp:
+            async with session.get(request_url, headers={"apisign": apisign}, allow_redirects=False) as resp:
                 return await resp.json()
         except aiohttp.client_exceptions.ClientConnectorError:
             return await using_requests(request_url, apisign)
@@ -91,9 +92,10 @@ async def using_requests(request_url, apisign):
         except aiohttp.client_exceptions.ClientPayloadError:
             return await using_requests(request_url, apisign)
         except asyncio.TimeoutError:
-            return {}
+            return await using_requests(request_url, apisign)
         except TimeoutError:
             return await using_requests(request_url, apisign)
+
 
 
 class Bittrex(object):

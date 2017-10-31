@@ -6,17 +6,18 @@ import datetime
 from concurrent.futures import ProcessPoolExecutor
 from calendar import timegm
 import aiofiles
+import multiprocessing
 
 __author__ = 'alex@collin.su'
 
-API_KEY = "88e548ba9f424c5bbd6706555aa69109"
-API_SECRET = "b1c0bf1aa947490c8a5a1c9a20ae2188"
-# API_KEY = "4e7cf9c842534da8ab72a2978aeb77ef"
-# API_SECRET = "9e4adc5ccb0546b7adcccd93e4c058ba"
+# API_KEY = "88e548ba9f424c5bbd6706555aa69109"
+# API_SECRET = "b1c0bf1aa947490c8a5a1c9a20ae2188"
+API_KEY = "4e7cf9c842534da8ab72a2978aeb77ef"
+API_SECRET = "9e4adc5ccb0546b7adcccd93e4c058ba"
 
 FEE = 0.5
 # Take profit цена (PROFIT + FEE)
-PROFIT = 1.0
+PROFIT = 1.5
 # Stop loss цена
 STOP_LOSS = 20.
 # Сумма покупки актива BTC
@@ -24,13 +25,15 @@ BID = 0.00001
 
 # Время выборки данных из истории торгов
 # Условие для длительного анализа истории
-TIME_LAST_TRADE = 60
-# Условие для короткого анализа истории
-TIME_MIN_TRADE = 30
 
 # Условие которое ограничевает покупку валют объем покупок которых
 # ниже чем продаж в процентном соотношении
-MIN_BUY_MORE_VOL = 300
+TIME_LAST_TRADE = {
+    10: [1, 5]  # От до
+}
+
+PASS_TIME_CONFIRMED = True
+
 # Максимальная сумма BTC при покупке актива
 BUY_LIMIT = 0.0001
 # Коэффициэнт суммы покупки на превышение минимального объема MIN_BUY_MORE_VOL
@@ -59,50 +62,62 @@ class App:
 
     async def buy_handler(self, currency, last):
         # Анализатор объема торгов
-        trade_history = await self.api.get_market_history(currency)
-        if trade_history['success'] and trade_history['result']:
-            vol_sell = 0.
-            vol_buy = 0.
-            vol_all = 0.
-            last_vol_buy = 0.
-            last_vol_sell = 0.
+        trade_history = await self.api.get_candles(currency, 'fiveMin')
+        if trade_history.get('success') and trade_history['result']:
 
-            for th in trade_history['result']:
-                try:
-                    ts = int(datetime.datetime.strptime(th['TimeStamp'], '%Y-%m-%dT%H:%M:%S.%f').timestamp()) + 10800
-                except ValueError:
-                    ts = int(datetime.datetime.strptime(th['TimeStamp'], '%Y-%m-%dT%H:%M:%S').timestamp()) + 10800
-                now = int(time.time())
-                if ts > now - (TIME_LAST_TRADE * 60):
-                    if th['OrderType'] == 'BUY':
-                        vol_buy += float(th['Quantity'])
-                    if th['OrderType'] == 'SELL':
-                        vol_sell += float(th['Quantity'])
-                if ts > now - (TIME_MIN_TRADE * 60):
-                    if th['OrderType'] == 'BUY':
-                        last_vol_buy += float(th['Quantity'])
-                    if th['OrderType'] == 'SELL':
-                        last_vol_sell += float(th['Quantity'])
-                    vol_all += float(th['Quantity'])
-            if vol_sell != 0.:
-                buy_delta = (vol_buy * 100. / vol_sell) - 100
-            else:
-                if vol_all != 0.:
-                    buy_delta = 100
+            confirm_trade = True
+            first_trade_vol = None
+            first_time = None
+            time_confirmation = {}
+            volumes = {}
+            for trade_min in TIME_LAST_TRADE.keys():
+                change = 0.
+                first_candle = None
+                if time_confirmation.get(trade_min) is None:
+                    time_confirmation[trade_min] = False
+                if volumes.get(trade_min) is None:
+                    volumes[trade_min] = 0.
+                for th in trade_history['result']:
+                    ts = int(datetime.datetime.strptime(th['T'], '%Y-%m-%dT%H:%M:%S').timestamp()) + 10800
+                    now = int(time.time())
+                    if ts > now - (trade_min * 60):
+                        if first_candle is None:
+                            first_candle = th
+                        change = th['C'] / (first_candle['O'] / 100)
+                        time_confirmation[trade_min] = True
+                if change != .0:
+                    buy_delta = int(change) - 100
                 else:
                     buy_delta = 0
-            if last_vol_sell != 0.:
-                last_buy_delta = (last_vol_buy * 100. / last_vol_sell) - 100
-            else:
-                if vol_all != 0.:
-                    last_buy_delta = 100
-                else:
-                    last_buy_delta = 0
 
-            buy_volume = float(BID) + (float(BID) * (buy_delta / MIN_BUY_MORE_VOL * OVER_MIN_BUY_COEFFICIENT))
+                volumes[trade_min] = buy_delta
+
+                if first_time is None or first_time >= trade_min:
+                    first_time = trade_min
+                    first_trade_vol = buy_delta
+
+                if not TIME_LAST_TRADE[trade_min][0] is None:
+                    if buy_delta < float(TIME_LAST_TRADE[trade_min][0]):
+                        confirm_trade = False
+                        break
+                if not TIME_LAST_TRADE[trade_min][1] is None:
+                    if buy_delta > float(TIME_LAST_TRADE[trade_min][1]):
+                        confirm_trade = False
+                        break
+
+            time_confirmed = True
+            for confirm in time_confirmation.keys():
+                if not time_confirmation[confirm]:
+                    time_confirmed = False
+                    break
+
+            buy_volume = float(BID)
+            if first_time != 0:
+                buy_volume += (float(BID) * (first_trade_vol / first_time * OVER_MIN_BUY_COEFFICIENT))
+
             if buy_volume > BUY_LIMIT:
                 buy_volume = BUY_LIMIT
-            if int(buy_delta) >= MIN_BUY_MORE_VOL and int(last_buy_delta) >= MIN_BUY_MORE_VOL < int(last_buy_delta):
+            if confirm_trade and (time_confirmed or PASS_TIME_CONFIRMED):
                 self.orders[currency]['time'] = time.time()
                 self.orders[currency]['price'] = last
                 self.orders[currency]['trading'] = True
@@ -120,12 +135,12 @@ class App:
                 now = datetime.datetime.now()
                 log = "[{0}] BUY  - {1} Market:{2} Price:{3} Vol:{4} Total:{5} Fee:{6}" \
                     .format(now.strftime('%Y-%m-%d %H:%M:%S'),
-                            currency, "+" + str(int(buy_delta)) + "%",
+                            currency, str(int(first_trade_vol)) + "%",
                             "%.8f" % last,
                             "%.8f" % self.orders[currency]['volume'],
                             "%.8f" % self.orders[currency]['total'],
                             "%.8f" % self.orders[currency]['fee'])
-                print(log)
+                print(log, volumes)
                 async with aiofiles.open('./logs/{0}_trades.log'.format(self.init_time_str), 'a+') as f:
                     await f.write(str(log) + '\n')
         return True
@@ -181,7 +196,8 @@ class App:
                             "%.8f" % last, "%.8f" % self.orders[currency]['volume'],
                             "%.8f" % self.orders[currency]['total'],
                             "%.8f" % delta, "%.8f" % self.orders[currency]['fee'])
-                async with aiofiles.open('./logs/{0}_trades.log'.format(self.init_time_str).format(self.init_time_str), 'a+') as f:
+                async with aiofiles.open('./logs/{0}_trades.log'.format(self.init_time_str).format(self.init_time_str),
+                                         'a+') as f:
                     await f.write(log + '\n')
                 print(log)
             self.orders[currency]['profit'] = delta
@@ -246,7 +262,8 @@ class App:
                 await f.write(
                     "=======================================================================================\n")
             now = datetime.datetime.now()
-            print("["+now.strftime('%Y-%m-%d %H:%M:%S')+"]", "INFO -", "Raise:", str(success) + "(" + str(success_c) + ")", "Waste:",
+            print("[" + now.strftime('%Y-%m-%d %H:%M:%S') + "]", "INFO -", "Raise:",
+                  str(success) + "(" + str(success_c) + ")", "Waste:",
                   str(fail) + "(" + str(fail_c) + ")",
                   "Fee:", int(fee * 100000000.), "Take:", win, "Loss:", lose,
                   "| Invest:", "%.8f" % (self.invest / 100000000),
