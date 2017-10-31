@@ -6,6 +6,6 @@ env
 *.egg-info
 dist
 build
-.log
+*.log
 .Python
 /pip-selfcheck.json
