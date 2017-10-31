@@ -76,26 +76,22 @@ async def encrypt(api_key, api_secret, export=True, export_fn='secrets.json'):
     return api
 
 
-async def using_requests(request_url, apisign):
-    with aiohttp.ClientSession() as session:
-        try:
-            async with session.get(request_url, headers={"apisign": apisign}, allow_redirects=False) as resp:
-                return await resp.json()
-        except aiohttp.client_exceptions.ClientConnectorError:
-            return await using_requests(request_url, apisign)
-        except aiohttp.client_exceptions.ServerDisconnectedError:
-            return await using_requests(request_url, apisign)
-        except aiohttp.client_exceptions.ContentTypeError:
-            return await using_requests(request_url, apisign)
-        except aiohttp.client_exceptions.ClientOSError:
-            return await using_requests(request_url, apisign)
-        except aiohttp.client_exceptions.ClientPayloadError:
-            return await using_requests(request_url, apisign)
-        except asyncio.TimeoutError:
-            return await using_requests(request_url, apisign)
-        except TimeoutError:
-            return await using_requests(request_url, apisign)
-
+async def using_requests(request_url, apisign, session):
+    try:
+        async with session.get(request_url, headers={"apisign": apisign}, allow_redirects=False) as resp:
+            return await resp.json()
+    except aiohttp.client_exceptions.ServerDisconnectedError:
+        return await using_requests(request_url, apisign, session)
+    except aiohttp.client_exceptions.ContentTypeError:
+        return await using_requests(request_url, apisign, session)
+    except aiohttp.client_exceptions.ClientOSError:
+        return await using_requests(request_url, apisign, session)
+    except aiohttp.client_exceptions.ClientPayloadError:
+        return await using_requests(request_url, apisign, session)
+    except asyncio.TimeoutError:
+        return await using_requests(request_url, apisign, session)
+    except (Exception, TimeoutError, OSError):
+        return await using_requests(request_url, apisign, session)
 
 
 class Bittrex(object):
@@ -110,6 +106,7 @@ class Bittrex(object):
         self.call_rate = 1.0 / calls_per_second
         self.last_call = None
         self.api_version = api_version
+        self.session= None
 
     def decrypt(self):
         if encrypted:
@@ -121,7 +118,7 @@ class Bittrex(object):
                 if isinstance(self.api_secret, str):
                     self.api_secret = ast.literal_eval(self.api_secret)
             except Exception:
-                pass
+                print("Ex decrypt")
             self.api_key = cipher.decrypt(self.api_key).decode()
             self.api_secret = cipher.decrypt(self.api_secret).decode()
         else:
@@ -138,7 +135,8 @@ class Bittrex(object):
 
             self.last_call = time.time()
 
-    async def _api_query(self, protection=None, path_dict=None, options=None, apiv1only=None, apiv2only=None):
+    async def _api_query(self, protection=None, path_dict=None, options=None, apiv1only=None, apiv2only=None,
+                         session=None):
         """
         Queries Bittrex
 
@@ -161,7 +159,6 @@ class Bittrex(object):
         request_url = BASE_URL_V2_0 if api_version == API_V2_0 else BASE_URL_V1_1
         request_url = request_url.format(path=path_dict[api_version])
 
-
         nonce = str(int(time.time() * 1000))
 
         if protection != PROTECTION_PUB:
@@ -170,12 +167,12 @@ class Bittrex(object):
         request_url += urlencode(options)
 
         apisign = hmac.new(self.api_secret.encode(),
-                          request_url.encode(),
-                          hashlib.sha512).hexdigest()
+                           request_url.encode(),
+                           hashlib.sha512).hexdigest()
 
         await self.wait()
 
-        return await self.dispatch(request_url, apisign)
+        return await self.dispatch(request_url, apisign, self.session)
 
     async def get_markets(self):
         """
@@ -699,7 +696,7 @@ class Bittrex(object):
         }, options={'currencyname': currency}, protection=PROTECTION_PRV)
 
     async def trade_sell(self, market=None, order_type=None, quantity=None, rate=None, time_in_effect=None,
-                   condition_type=None, target=0.0):
+                         condition_type=None, target=0.0):
         """
         Enter a sell order into the book
         Endpoint
@@ -739,7 +736,7 @@ class Bittrex(object):
         }, protection=PROTECTION_PRV)
 
     async def trade_buy(self, market=None, order_type=None, quantity=None, rate=None, time_in_effect=None,
-                  condition_type=None, target=0.0):
+                        condition_type=None, target=0.0):
         """
         Enter a buy order into the book
         Endpoint
