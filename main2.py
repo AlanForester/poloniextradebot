@@ -37,7 +37,7 @@ BUY_LIMIT = 0.0001
 OVER_MIN_BUY_COEFFICIENT = 0.1
 
 # Минимальная разница высокой и низкой цены за 24ч
-MARKET_HIGH_LOW_MIN_DELTA = 50
+MARKET_HIGH_LOW_MIN_DELTA = 100
 # Условие для разности цены актива (Больше меньше)
 MARKET_DELTA_CONDITION = 'more'  # 'more' or 'less'
 
