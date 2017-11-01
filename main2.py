@@ -3,11 +3,11 @@ import time
 import asyncio
 import uvloop
 import datetime
-from concurrent.futures import ProcessPoolExecutor
 import aiohttp
 import aiofiles
 import multiprocessing
-
+import threading
+from concurrent.futures import ThreadPoolExecutor
 __author__ = 'alex@collin.su'
 
 # API_KEY = "88e548ba9f424c5bbd6706555aa69109"
@@ -29,7 +29,8 @@ BID = 0.00001
 # Условие которое ограничевает покупку валют объем покупок которых
 # ниже чем продаж в процентном соотношении
 TIME_LAST_TRADE = {
-    10: [3, None],  # От до
+    10: [1, None],  # От до
+    120: [None, -5],
 }
 
 PASS_TIME_CONFIRMED = True
@@ -51,7 +52,6 @@ MAX_SPREAD = 0
 
 class App:
     def __init__(self, api_key=None, api_sec=None):
-        self.executor = ProcessPoolExecutor(2)
         self.orders = {}
         self.min_trades = {}
 
@@ -66,7 +66,6 @@ class App:
         # Анализатор объема торгов
         trade_history = await self.api.get_candles(currency, 'fiveMin')
         if trade_history.get('success') and trade_history['result']:
-
             confirm_trade = True
             first_trade_vol = 0.
             first_time = None
@@ -152,7 +151,7 @@ class App:
         if not self.orders.get(currency):
             self.orders[currency] = {'last': last}
         if not self.orders.get(currency) or not self.orders[currency].get('trading', False):
-            self.orders[currency]['working'] = asyncio.ensure_future(self.buy_handler(currency, last))
+            self.orders[currency]['task'] = asyncio.ensure_future(self.buy_handler(currency, last))
         else:
             current_price = last * self.orders[currency]['volume']
             delta = int((current_price - self.orders[currency]['total']) * 100000000.)
@@ -210,13 +209,13 @@ class App:
         return last
 
     async def ticker(self, market, tick):
-        if float(self.min_trades.get(market, 0.)):
+        if float(self.min_trades.get(market, 0.)) != 0.:
             if not self.orders.get(market) or \
-                    (self.orders.get(market) and self.orders[market].get('working')
-                     and self.orders[market]['working'].done()):
-                return await self.handler(market, float(tick))
+                    (self.orders.get(market) and self.orders[market].get('task')
+                     and self.orders[market]['task'].done()):
+                asyncio.ensure_future(self.handler(market, float(tick)))
 
-    async def log(self):
+    def log(self):
         while True:
             fail = 0
             fail_c = 0
@@ -245,8 +244,8 @@ class App:
                     delta = int((model['last'] - model['price']) * model['volume'] * 100000000)
                     now = datetime.datetime.now()
                     if LOGGING_TO_FILE:
-                        async with aiofiles.open('./logs/{0}_markets.log'.format(self.init_time_str), 'a+') as f:
-                            await f.write(
+                        with open('./logs/{0}_markets.log'.format(self.init_time_str), 'a+') as f:
+                            f.write(
                                 "[{0}] {1} - Last:{2} Buy:{3} TP:{7} SL:{9} | BUY Vol:{4} Total:{11} Delta:{5} Fee:{6} "
                                 "| LEFT TP:{8} SL:{10}\n".format(now.strftime('%Y-%m-%d %H:%M:%S'), order,
                                                                  "%.8f" % model['last'], "%.8f" % model['price'],
@@ -266,8 +265,8 @@ class App:
                 if self.orders[order].get('fee'):
                     fee += self.orders[order].get('fee')
             if LOGGING_TO_FILE:
-                async with aiofiles.open('./logs/{0}_markets.log'.format(self.init_time_str), 'a+') as f:
-                    await f.write(
+                with open('./logs/{0}_markets.log'.format(self.init_time_str), 'a+') as f:
+                    f.write(
                         "=======================================================================================\n")
             now = datetime.datetime.now()
             print("[" + now.strftime('%Y-%m-%d %H:%M:%S') + "]", "INFO -", "Raise:",
@@ -279,7 +278,7 @@ class App:
                   "Orders(All,Profit,Loss):", self.trades['buy'], self.trades['sell'], self.trades['lose'],
                   "Tick:", str(int(time.time() - self.last_tick)) + 'sec.',
                   "Trading:", trading)
-            await asyncio.sleep(1)
+            time.sleep(1)
 
     async def run(self, input_market=None):
         asyncio.ensure_future(self.log())

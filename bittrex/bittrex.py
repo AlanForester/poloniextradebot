@@ -90,7 +90,7 @@ async def using_requests(request_url, apisign, session):
         return await using_requests(request_url, apisign, session)
     except asyncio.TimeoutError:
         return await using_requests(request_url, apisign, session)
-    except (Exception, TimeoutError, OSError):
+    except (BaseException, TimeoutError, OSError):
         return await using_requests(request_url, apisign, session)
 
 
@@ -106,7 +106,7 @@ class Bittrex(object):
         self.call_rate = 1.0 / calls_per_second
         self.last_call = None
         self.api_version = api_version
-        self.session= None
+        self.session = None
 
     def decrypt(self):
         if encrypted:
@@ -135,8 +135,7 @@ class Bittrex(object):
 
             self.last_call = time.time()
 
-    async def _api_query(self, protection=None, path_dict=None, options=None, apiv1only=None, apiv2only=None,
-                         session=None):
+    async def _api_query(self, protection=None, path_dict=None, options=None, apiv1only=None, apiv2only=None):
         """
         Queries Bittrex
 
