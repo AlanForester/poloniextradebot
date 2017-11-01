@@ -215,7 +215,7 @@ class App:
                      and self.orders[market]['task'].done()):
                 asyncio.ensure_future(self.handler(market, float(tick)))
 
-    def log(self):
+    async def log(self):
         while True:
             fail = 0
             fail_c = 0
@@ -244,8 +244,8 @@ class App:
                     delta = int((model['last'] - model['price']) * model['volume'] * 100000000)
                     now = datetime.datetime.now()
                     if LOGGING_TO_FILE:
-                        with open('./logs/{0}_markets.log'.format(self.init_time_str), 'a+') as f:
-                            f.write(
+                        async with open('./logs/{0}_markets.log'.format(self.init_time_str), 'a+') as f:
+                            await f.write(
                                 "[{0}] {1} - Last:{2} Buy:{3} TP:{7} SL:{9} | BUY Vol:{4} Total:{11} Delta:{5} Fee:{6} "
                                 "| LEFT TP:{8} SL:{10}\n".format(now.strftime('%Y-%m-%d %H:%M:%S'), order,
                                                                  "%.8f" % model['last'], "%.8f" % model['price'],
@@ -265,8 +265,8 @@ class App:
                 if self.orders[order].get('fee'):
                     fee += self.orders[order].get('fee')
             if LOGGING_TO_FILE:
-                with open('./logs/{0}_markets.log'.format(self.init_time_str), 'a+') as f:
-                    f.write(
+                async with open('./logs/{0}_markets.log'.format(self.init_time_str), 'a+') as f:
+                    await wf.write(
                         "=======================================================================================\n")
             now = datetime.datetime.now()
             print("[" + now.strftime('%Y-%m-%d %H:%M:%S') + "]", "INFO -", "Raise:",
@@ -278,7 +278,7 @@ class App:
                   "Orders(All,Profit,Loss):", self.trades['buy'], self.trades['sell'], self.trades['lose'],
                   "Tick:", str(int(time.time() - self.last_tick)) + 'sec.',
                   "Trading:", trading)
-            time.sleep(1)
+            await asyncio.sleep(1)
 
     async def run(self, input_market=None):
         asyncio.ensure_future(self.log())
