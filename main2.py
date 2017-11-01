@@ -266,7 +266,7 @@ class App:
                     fee += self.orders[order].get('fee')
             if LOGGING_TO_FILE:
                 async with open('./logs/{0}_markets.log'.format(self.init_time_str), 'a+') as f:
-                    await wf.write(
+                    await f.write(
                         "=======================================================================================\n")
             now = datetime.datetime.now()
             print("[" + now.strftime('%Y-%m-%d %H:%M:%S') + "]", "INFO -", "Raise:",
